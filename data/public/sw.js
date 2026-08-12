@@ -5,13 +5,14 @@
  * Does NOT cache user PDF files or blob URLs.
  */
 
-const CACHE_NAME = '20260315-154122';
+const CACHE_NAME = 'BUILD_VERSION_PLACEHOLDER';
 const APP_SHELL = [
   './',
   'index.html',
   'presentation.html',
   'remote.html',
   'qa.html',
+  'review.html',
   'manifest.json',
   'assets/icon-192.png',
   'assets/icon-512.png',
@@ -71,9 +72,13 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(event.request)
         .then((response) => {
-          // Update the cache with the fresh copy
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          // Only cache genuinely successful responses — never let a
+          // transient error (e.g. a cold-starting host) get stuck in
+          // the cache and served forever afterwards.
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
           return response;
         })
         .catch(() => caches.match(event.request)) // Offline fallback
@@ -84,9 +89,12 @@ self.addEventListener('fetch', (event) => {
   // JS / CSS / assets (Vite hashed) → cache-first (hash guarantees uniqueness)
   event.respondWith(
     caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+      if (cached) return cached;
+      return fetch(event.request).then((response) => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
         return response;
       });
     })

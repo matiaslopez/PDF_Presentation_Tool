@@ -55,12 +55,20 @@ export default defineConfig({
         // Inject them into sw.js
         let swContent = fs.readFileSync(swPath, 'utf-8');
         const injectString = assets.map(a => `'${a}'`).join(',\n  ');
-        
+
         swContent = swContent.replace(
           '/* VITE_INJECT_ASSETS */',
           injectString
         );
-        
+
+        // Stamp a fresh cache name for this build so the service worker's
+        // activate handler purges any previous (possibly bad) cache instead
+        // of reusing a fixed name across every deploy.
+        swContent = swContent.replace(
+          'BUILD_VERSION_PLACEHOLDER',
+          String(Date.now())
+        );
+
         fs.writeFileSync(swPath, swContent);
         console.log(`[vite-plugin] Injected ${assets.length} hashed assets into sw.js`);
       }
