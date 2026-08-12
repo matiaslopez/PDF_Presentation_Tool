@@ -53,6 +53,7 @@ export function cacheElements() {
     presenterDrawCanvas: document.getElementById('presenter-draw-canvas'),
     drawToolbar: document.getElementById('draw-toolbar'),
     qaBtn: document.getElementById('qa-btn'),
+    reviewBtn: document.getElementById('review-btn'),
     webcamBtn: document.getElementById('webcam-btn'),
     presenterSpotlightOverlay: document.getElementById('presenter-spotlight-overlay'),
   });

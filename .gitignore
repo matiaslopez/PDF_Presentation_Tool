@@ -1,0 +1,4 @@
+node_modules/
+dist/
+connectionsCounter.txt
+.DS_Store

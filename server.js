@@ -22,7 +22,7 @@ const app = express();
 /*  Gestione Contatore Visite (/connections.txt)                       */
 /* ------------------------------------------------------------------ */
 
-const CONNECTIONS_FILE = '/connectionsCounter.txt';
+const CONNECTIONS_FILE = path.join(__dirname, 'connectionsCounter.txt');
 let totalConnections = 0;
 
 // 1. On server start, read the file to retrieve the saved value
@@ -115,12 +115,12 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 /**
- * Sessions map: sessionId → { presenter: WebSocket, remotes: Set<WebSocket>, qaClients: Set<WebSocket> }
+ * Sessions map: sessionId → { presenter: WebSocket, remotes: Set<WebSocket>, qaClients: Set<WebSocket>, reviewClients: Set<WebSocket> }
  */
 const sessions = new Map();
 
 wss.on('connection', (ws) => {
-  let role = null;       // 'presenter' | 'remote' | 'qa-audience'
+  let role = null;       // 'presenter' | 'remote' | 'qa-audience' | 'review-audience'
   let sessionId = null;
 
   ws.isAlive = true;
@@ -152,9 +152,14 @@ wss.on('connection', (ws) => {
               try { r.close(1000, 'session-reset'); } catch (_) {}
             });
           }
+          if (old.reviewClients) {
+            old.reviewClients.forEach((r) => {
+              try { r.close(1000, 'session-reset'); } catch (_) {}
+            });
+          }
         }
 
-        sessions.set(sessionId, { presenter: ws, remotes: new Set(), qaClients: new Set() });
+        sessions.set(sessionId, { presenter: ws, remotes: new Set(), qaClients: new Set(), reviewClients: new Set() });
         ws.send(JSON.stringify({ type: 'session-created', sessionId }));
         console.log(`[ws] Session created: ${sessionId}`);
         break;
@@ -200,6 +205,78 @@ wss.on('connection', (ws) => {
         qaSession.qaClients.add(ws);
         ws.send(JSON.stringify({ type: 'qa-joined', sessionId }));
         console.log(`[ws] Q&A audience joined session ${sessionId} (${qaSession.qaClients.size} qa clients)`);
+        break;
+      }
+
+      /* ---- Phone joins the slide-review session ---- */
+      case 'join-review': {
+        sessionId = msg.sessionId;
+        role = 'review-audience';
+
+        const reviewSession = sessions.get(sessionId);
+        if (!reviewSession || !reviewSession.presenter || reviewSession.presenter.readyState !== 1) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+          ws.close(4004, 'session-not-found');
+          return;
+        }
+
+        reviewSession.reviewClients.add(ws);
+        ws.send(JSON.stringify({ type: 'review-joined', sessionId }));
+
+        reviewSession.presenter.send(JSON.stringify({
+          type: 'review-client-joined',
+          reviewCount: reviewSession.reviewClients.size,
+        }));
+
+        console.log(`[ws] Review audience joined session ${sessionId} (${reviewSession.reviewClients.size} review clients)`);
+        break;
+      }
+
+      /* ---- Presenter pushes a rendered slide image to review clients ---- */
+      case 'page-image': {
+        if (role !== 'presenter' || !sessionId) return;
+        const reviewS = sessions.get(sessionId);
+        if (!reviewS) return;
+
+        const image = JSON.stringify({
+          type: 'page-image',
+          pageNum: msg.pageNum,
+          dataUrl: msg.dataUrl,
+        });
+
+        reviewS.reviewClients.forEach((r) => {
+          if (r.readyState === 1) r.send(image);
+        });
+        break;
+      }
+
+      /* ---- Presenter tells review clients which slide is live right now ---- */
+      case 'current-page': {
+        if (role !== 'presenter' || !sessionId) return;
+        const curS = sessions.get(sessionId);
+        if (!curS) return;
+
+        const pointer = JSON.stringify({
+          type: 'current-page',
+          pageNum: msg.pageNum,
+        });
+
+        curS.reviewClients.forEach((r) => {
+          if (r.readyState === 1) r.send(pointer);
+        });
+        break;
+      }
+
+      /* ---- Presenter loaded a new file: review clients must drop their cache ---- */
+      case 'deck-reset': {
+        if (role !== 'presenter' || !sessionId) return;
+        const resetS = sessions.get(sessionId);
+        if (!resetS) return;
+
+        const resetMsg = JSON.stringify({ type: 'deck-reset' });
+        resetS.reviewClients.forEach((r) => {
+          if (r.readyState === 1) r.send(resetMsg);
+        });
         break;
       }
 
@@ -264,6 +341,9 @@ wss.on('connection', (ws) => {
       session.qaClients.forEach((r) => {
         try { r.send(closedMsg); r.close(1000, 'presenter-left'); } catch (_) {}
       });
+      session.reviewClients.forEach((r) => {
+        try { r.send(closedMsg); r.close(1000, 'presenter-left'); } catch (_) {}
+      });
       sessions.delete(sessionId);
       console.log(`[ws] Session destroyed: ${sessionId}`);
     } else if (role === 'remote') {
@@ -279,6 +359,15 @@ wss.on('connection', (ws) => {
     } else if (role === 'qa-audience') {
       session.qaClients.delete(ws);
       console.log(`[ws] Q&A audience left session ${sessionId} (${session.qaClients.size} qa clients)`);
+    } else if (role === 'review-audience') {
+      session.reviewClients.delete(ws);
+      if (session.presenter && session.presenter.readyState === 1) {
+        session.presenter.send(JSON.stringify({
+          type: 'review-client-left',
+          reviewCount: session.reviewClients.size,
+        }));
+      }
+      console.log(`[ws] Review audience left session ${sessionId} (${session.reviewClients.size} review clients)`);
     }
   });
 });

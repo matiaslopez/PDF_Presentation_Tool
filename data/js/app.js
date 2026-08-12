@@ -13,6 +13,8 @@ import { renderAllPreviews, navigateTo } from './presenter/slides.js';
 import { initVideoSync } from './videoSync.js';
 import screenManager from './screenManager.js';
 import { uiState } from './presenter/uiState.js';
+import remoteManager from './remoteManager.js';
+import { updateReviewButton } from './presenter/modals.js';
 /* ------------------------------------------------------------------ */
 /*  Boot                                                               */
 /* ------------------------------------------------------------------ */
@@ -88,6 +90,14 @@ async function handleFiles(files) {
     if (AppState.playlist && AppState.playlist.length > 0) {
       AppState.playlist.forEach(url => URL.revokeObjectURL(url));
     }
+
+    // A new file means old page numbers mean nothing anymore — drop the
+    // Slide Review cache and tell any connected review clients to do the same.
+    uiState.reviewImages.clear();
+    uiState.reviewSentPages.clear();
+    uiState.reviewPaused = false;
+    remoteManager.sendDeckReset();
+    updateReviewButton();
 
     // Show presenter view first so canvases/videos have layout dimensions
     showPresenterView();

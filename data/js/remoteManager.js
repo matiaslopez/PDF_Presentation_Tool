@@ -10,10 +10,12 @@ const SESSION_KEY = 'pdf-presenter-remote-session';
 let ws = null;
 let sessionId = null;
 let remoteCount = 0;
+let reviewCount = 0;
 let _onCommand = null;
 let _onStatusChange = null;
 let reconnectTimer = null;
 let _onQaQuestion = null;
+let _onReviewClientChange = null;
 
 /* ------------------------------------------------------------------ */
 /*  Public API                                                         */
@@ -67,6 +69,12 @@ function connect() {
         case 'qa-question':
           if (_onQaQuestion) _onQaQuestion({ text: msg.text, timestamp: msg.timestamp });
           break;
+
+        case 'review-client-joined':
+        case 'review-client-left':
+          reviewCount = msg.reviewCount || 0;
+          if (_onReviewClientChange) _onReviewClientChange({ reviewCount });
+          break;
       }
     };
 
@@ -76,7 +84,9 @@ function connect() {
 
     ws.onclose = () => {
       remoteCount = 0;
+      reviewCount = 0;
       _fireStatusChange();
+      if (_onReviewClientChange) _onReviewClientChange({ reviewCount });
     };
   });
 }
@@ -92,7 +102,9 @@ function disconnect() {
   }
   sessionId = null;
   remoteCount = 0;
+  reviewCount = 0;
   _fireStatusChange();
+  if (_onReviewClientChange) _onReviewClientChange({ reviewCount });
 }
 
 /**
@@ -185,6 +197,74 @@ function onQaQuestion(callback) {
   _onQaQuestion = callback;
 }
 
+/**
+ * Push a rendered slide image to all connected review clients.
+ */
+function sendPageImage(pageNum, dataUrl) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({
+      type: 'page-image',
+      pageNum,
+      dataUrl,
+    }));
+  }
+}
+
+/**
+ * Tell review clients which page is live right now (for "Follow" mode),
+ * independent of whether that page's image was already sent before.
+ */
+function sendCurrentPage(pageNum) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({
+      type: 'current-page',
+      pageNum,
+    }));
+  }
+}
+
+/**
+ * Tell review clients to drop their cached slides — the presenter just
+ * loaded a different file, so old page numbers no longer mean anything.
+ */
+function sendDeckReset() {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'deck-reset' }));
+  }
+}
+
+/**
+ * Build the Slide Review URL that the audience should open.
+ */
+function getReviewUrl() {
+  if (!sessionId) return null;
+  return `${location.origin}/review.html?session=${sessionId}`;
+}
+
+/**
+ * Build the QR code image URL for Slide Review.
+ */
+function getReviewQRCodeUrl() {
+  const reviewUrl = getReviewUrl();
+  if (!reviewUrl) return null;
+  return `/api/qr?url=${encodeURIComponent(reviewUrl)}`;
+}
+
+/**
+ * Register callback for review-audience connect/disconnect events.
+ * callback({ reviewCount })
+ */
+function onReviewClientChange(callback) {
+  _onReviewClientChange = callback;
+}
+
+/**
+ * Get the number of connected review viewers.
+ */
+function getReviewCount() {
+  return reviewCount;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Internal                                                           */
 /* ------------------------------------------------------------------ */
@@ -225,4 +305,11 @@ export default {
   getQaUrl,
   getQaQRCodeUrl,
   onQaQuestion,
+  sendPageImage,
+  sendCurrentPage,
+  sendDeckReset,
+  getReviewUrl,
+  getReviewQRCodeUrl,
+  onReviewClientChange,
+  getReviewCount,
 };

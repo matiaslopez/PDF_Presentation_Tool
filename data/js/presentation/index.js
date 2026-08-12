@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { tryAutoFullscreen, toggleFullscreen, loadPDF, renderCurrentSlide, setBlackout } from './slides.js';
-import { showLaser, hideLaser, showSpotlight, hideSpotlight, drawStrokeOnOverlay, clearDrawOverlay, applyZoom, resetZoom, updateProgressBar, showQaOverlay, hideQaOverlay, startBreakTimer, stopBreakTimer, syncDrawOverlaySize, showWebcamBubble, hideWebcamBubble, setWebcamBubbleVisibility } from './overlays.js';
+import { showLaser, hideLaser, showSpotlight, hideSpotlight, drawStrokeOnOverlay, clearDrawOverlay, applyZoom, resetZoom, updateProgressBar, showQaOverlay, hideQaOverlay, showReviewOverlay, hideReviewOverlay, startBreakTimer, stopBreakTimer, syncDrawOverlaySize, showWebcamBubble, hideWebcamBubble, setWebcamBubbleVisibility } from './overlays.js';
 
 const CHANNEL_NAME = 'pdf-presenter-sync';
 let channel = null;
@@ -154,6 +154,14 @@ function handleMessage(data) {
 
     case 'qa-hide':
       hideQaOverlay();
+      break;
+
+    case 'review-show':
+      showReviewOverlay(payload.reviewUrl, payload.qrUrl);
+      break;
+
+    case 'review-hide':
+      hideReviewOverlay();
       break;
 
     case 'webcam-start':

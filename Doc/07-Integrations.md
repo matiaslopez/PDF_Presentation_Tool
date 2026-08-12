@@ -28,6 +28,17 @@ This module manages a WebSocket connection to the backend server. It operates as
 *   **State Broadcasting (`sendStateUpdate`):**
     *   A public method called whenever the presenter changes slides. It sends a `state-update` message to the server containing the `currentPage` and `totalPages`. The server relays this to all connected phone remotes, ensuring their displays remain synchronized with the main presentation.
 
+## 1.1. Slide Review
+
+Slide Review reuses the same `sessionId`/WebSocket session as the Phone Remote and Q&A features, adding a third relayed role (`review-audience`, handled server-side alongside `remotes` and `qaClients` in `server.js`), and a phone-side page at `data/review.html`.
+
+Because the PDF is loaded client-side only and never uploaded to the server (see `pdfRenderer.js`), the audience cannot be handed the file itself and trusted to respect a page limit -- that would be trivially bypassable via devtools. Instead:
+
+*   **Capture (presenter side, `slides.js`):** every time a PDF page is rendered, `captureReviewPage()` also renders it into a detached canvas (via the existing `renderPage()` clip/scale logic used for Beamer/Google-Docs half-page splitting) and encodes it as a downscaled JPEG. This happens unconditionally, independent of whether Slide Review has been turned on, and is cached in `uiState.reviewImages` (a `pageNum -> dataUrl` map) -- this is the "high-water mark" of everything the audience is ever allowed to see.
+*   **Transmission (`remoteManager.js`):** `sendPageImage()` pushes each newly captured slide over the WebSocket as soon as it exists. When the presenter turns Slide Review on (`handleReviewToggle` in `modals.js`), the entire cached backlog is resent immediately, so students catch up even if the feature was activated mid-lecture.
+*   **Relay (`server.js`):** the `page-image` message is only accepted from the `presenter` role and is broadcast verbatim to every socket in `session.reviewClients`. The server holds no additional state -- a newly joined review client is caught up by the presenter's backlog resend, not by server-side caching.
+*   **Audience phone page (`review.html`):** joins with `join-review`, keeps a local `pageNum -> dataUrl` map built only from `page-image` messages it actually received, and renders a thumbnail gallery + full-screen swipeable viewer scoped to that map. It structurally cannot display a page it was never sent, regardless of client-side tampering.
+
 ## 2. Webcam Integration (`webcamManager.js`)
 
 The `webcamManager.js` module allows the presenter to embed a live feed of themselves directly onto the audience's screen, useful for hybrid or recorded presentations.

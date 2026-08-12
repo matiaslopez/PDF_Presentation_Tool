@@ -8,7 +8,7 @@ import { initSplitter, initSidebarSplitter, applySplitLayout, toggleNotesCollaps
 import { navigateTo, renderAllPreviews, setNotesZoom } from './slides.js';
 import { handleScreenSwitch, handleStartPresentation } from './screens.js';
 import { toggleBlackout, clearPresenterDrawing, syncPresenterDrawCanvas } from './tools.js';
-import { showHelpModal, handleBreakToggle, handleRemoteToggle, updateRemoteButton, handleQaToggle, updateQaButton, updateQaModalList, handleWebcamToggle } from './modals.js';
+import { showHelpModal, handleBreakToggle, handleRemoteToggle, updateRemoteButton, handleQaToggle, updateQaButton, updateQaModalList, handleWebcamToggle, handleReviewToggle, handleReviewClientChange } from './modals.js';
 import { handleKeyDown } from './keyboard.js';
 import { initCaptions } from './captionsManager.js';
 import { initRecording } from './recordingManager.js';
@@ -147,7 +147,10 @@ function bindEvents() {
   }
 
   els.qaBtn?.addEventListener('click', handleQaToggle);
+  els.reviewBtn?.addEventListener('click', handleReviewToggle);
   els.webcamBtn?.addEventListener('click', handleWebcamToggle);
+
+  remoteManager.onReviewClientChange(handleReviewClientChange);
 
   remoteManager.onQaQuestion((question) => {
     uiState.qaQuestions.unshift(question);

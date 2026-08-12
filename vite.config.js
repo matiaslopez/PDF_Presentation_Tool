@@ -13,6 +13,7 @@ export default defineConfig({
         presentation: resolve(__dirname, 'data/presentation.html'),
         qa: resolve(__dirname, 'data/qa.html'),
         remote: resolve(__dirname, 'data/remote.html'),
+        review: resolve(__dirname, 'data/review.html'),
       },
       output: {
         entryFileNames: 'js/[name]-[hash].js',

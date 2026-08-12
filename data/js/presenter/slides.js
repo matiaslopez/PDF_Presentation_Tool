@@ -54,6 +54,11 @@ export async function renderAllPreviews() {
       clip,
     });
 
+    // Capture a snapshot for the audience Slide Review view (high-water mark)
+    // and tell any connected review clients which slide is live (for "Follow" mode).
+    captureReviewPage(AppState.currentPage);
+    pushReviewCurrentPage(AppState.currentPage);
+
     // Next slide
     const nextPage = AppState.currentPage + 1;
     if (nextPage <= AppState.totalPages) {
@@ -156,4 +161,79 @@ export async function renderNotes() {
 export function setNotesZoom(value) {
   uiState.notesZoom = Math.max(0.4, Math.min(3.0, value));
   renderNotes();
+}
+
+/**
+ * Render a downscaled JPEG snapshot of a PDF page for the Slide Review
+ * audience view and cache it (high-water mark, kept even while paused).
+ * Transmission is separate (see sendReviewPage) so a page captured while
+ * paused can still be pushed later once Review is resumed. No-op outside
+ * PDF mode; re-renders are skipped once a page is already cached.
+ */
+function captureReviewPage(pageNum) {
+  if (AppState.mediaType !== 'pdf') return;
+
+  if (uiState.reviewImages.has(pageNum)) {
+    sendReviewPage(pageNum, uiState.reviewImages.get(pageNum));
+    return;
+  }
+
+  const clip = AppState.isBeamerSplitMode ? 'left'
+             : AppState.isGDocsSplitMode ? 'top'
+             : null;
+
+  const offscreenCanvas = document.createElement('canvas');
+  renderPage(pageNum, offscreenCanvas, {
+    maxWidth: 1100,
+    maxHeight: 1100,
+    clip,
+    dprCap: 1,
+  }).then(() => {
+    const dataUrl = offscreenCanvas.toDataURL('image/jpeg', 0.72);
+    uiState.reviewImages.set(pageNum, dataUrl);
+    sendReviewPage(pageNum, dataUrl);
+  }).catch((err) => {
+    console.error('[slides] Failed to capture review snapshot for page', pageNum, err);
+  });
+}
+
+/**
+ * Push a captured slide to review clients, unless Slide Review is
+ * currently paused (in which case it stays cached but withheld until
+ * resumed) or it was already sent once.
+ */
+function sendReviewPage(pageNum, dataUrl) {
+  if (uiState.reviewPaused) return;
+  if (uiState.reviewSentPages.has(pageNum)) return;
+  if (!remoteManager.isConnected()) return;
+
+  remoteManager.sendPageImage(pageNum, dataUrl);
+  uiState.reviewSentPages.add(pageNum);
+}
+
+/**
+ * Tell review clients which page is live right now, unless paused.
+ * Safe to call even for a page that was never sent as an image yet
+ * (e.g. still rendering) — Follow-mode clients show a loading state
+ * until the matching page-image arrives.
+ */
+function pushReviewCurrentPage(pageNum) {
+  if (uiState.reviewPaused) return;
+  if (!remoteManager.isConnected()) return;
+  remoteManager.sendCurrentPage(pageNum);
+}
+
+/**
+ * Toggle Slide Review pause. While paused, students' view is frozen —
+ * new slides are still captured locally but withheld. On resume, the
+ * current slide is flushed immediately so viewers catch up right away.
+ * Returns the new paused state.
+ */
+export function toggleReviewPause() {
+  uiState.reviewPaused = !uiState.reviewPaused;
+  if (!uiState.reviewPaused) {
+    captureReviewPage(AppState.currentPage);
+    pushReviewCurrentPage(AppState.currentPage);
+  }
+  return uiState.reviewPaused;
 }

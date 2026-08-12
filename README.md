@@ -9,6 +9,7 @@ The official website is available at [PDF Presentation Tool](https://presentatio
 - **Beamer support** -- Automatic detection of LaTeX Beamer split-mode PDFs (slide + notes)
 - **Phone remote control** -- Scan a QR code to control slides from your phone via WebSocket
 - **Audience Q&A** -- Display a QR code on the audience screen for attendees to submit anonymous questions
+- **Slide Review** -- QR-accessible phone view where the audience can flip back through slides already shown, without ever being able to see ahead ("no spoilers")
 - **Break timer** -- Set 5/10/15 min (or custom) breaks with a full-screen countdown on the audience display
 - **Laser & Spotlight** -- Use a red laser dot or a yellow spotlight that dims the background, following your mouse
 - **Whiteboard annotations** -- Draw directly on slides with multiple colors and line weights
@@ -61,6 +62,14 @@ The app will be available on port 80 inside the container.
 3. Attendees scan it to open a Q&A page where they can submit anonymous questions
 4. Questions appear in real-time in the presenter's Q&A panel
 5. Click the button again to hide the QR code and close the panel
+
+### Slide Review
+
+1. Click **Review** in the bottom bar (PDF presentations only)
+2. A QR code appears on the audience display -- students scan it to open a phone-friendly gallery
+3. As you advance through the deck, each slide is pushed to connected phones the moment it's first shown
+4. Students can tap any slide already shown to view it full-screen and swipe between them -- slides you haven't reached yet are never sent, so there's no way to see ahead
+5. If you go back to recap an earlier slide, students keep access to everything already shown (the furthest point reached, not just the current slide)
 
 ### Webcam
 
@@ -132,6 +141,8 @@ Both windows communicate via BroadcastChannel API with a postMessage fallback. P
     ├── index.html                  -- Presenter view
     ├── presentation.html           -- Audience display
     ├── remote.html                 -- Phone remote control
+    ├── qa.html                     -- Audience Q&A submission page
+    ├── review.html                 -- Audience Slide Review gallery
     ├── manifest.json               -- PWA manifest
     ├── sw.js                       -- Service worker
     ├── css/

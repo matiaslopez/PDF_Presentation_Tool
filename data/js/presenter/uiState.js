@@ -29,4 +29,8 @@ export const uiState = {
   qaActive: false,
   webcamActive: false,
   webcamPosition: 'top-right',
+  reviewActive: false,
+  reviewImages: new Map(),
+  reviewSentPages: new Set(),
+  reviewPaused: false,
 };

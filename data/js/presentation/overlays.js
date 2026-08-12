@@ -231,6 +231,26 @@ export function hideQaOverlay() {
   if (overlay) overlay.classList.remove('visible');
 }
 
+export function showReviewOverlay(reviewUrl, qrUrl) {
+  const overlay = document.getElementById('review-overlay');
+  if (!overlay) return;
+
+  const qrImg = document.getElementById('review-overlay-qr');
+  const urlText = document.getElementById('review-overlay-url');
+
+  if (qrImg && qrUrl) {
+    qrImg.src = qrUrl.startsWith('/') ? location.origin + qrUrl : qrUrl;
+  }
+  if (urlText && reviewUrl) urlText.textContent = reviewUrl;
+
+  overlay.classList.add('visible');
+}
+
+export function hideReviewOverlay() {
+  const overlay = document.getElementById('review-overlay');
+  if (overlay) overlay.classList.remove('visible');
+}
+
 export function startBreakTimer(duration, title) {
   const overlay = document.getElementById('break-overlay');
   const titleEl = document.getElementById('break-title');

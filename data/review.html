@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d1117">
+
+  <title>PDF Presentation Tool — Slide Review</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    /* ---- Header ---- */
+    .header {
+      padding: 1rem 1.2rem;
+      text-align: center;
+      flex-shrink: 0;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #e6edf3;
+      letter-spacing: .03em;
+    }
+
+    .header p {
+      font-size: .82rem;
+      color: #8b949e;
+      margin-top: .3rem;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      margin-top: .4rem;
+      font-size: .85rem;
+      color: #8b949e;
+    }
+
+    /* ---- Mode toggle ---- */
+    .mode-toggle {
+      display: flex;
+      gap: .5rem;
+      justify-content: center;
+      margin-top: .7rem;
+    }
+
+    .mode-btn {
+      padding: .45rem 1.1rem;
+      border: 1px solid #30363d;
+      border-radius: 999px;
+      background: #161b22;
+      color: #8b949e;
+      font-family: inherit;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .mode-btn.active {
+      background: #58a6ff;
+      color: #0d1117;
+      border-color: #58a6ff;
+    }
+
+    /* ---- Follow mode ---- */
+    .follow-wrap {
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      overflow: hidden;
+    }
+
+    .follow-wrap img {
+      max-width: 100%;
+      max-height: calc(100% - 3rem);
+      object-fit: contain;
+      border-radius: 10px;
+      border: 1px solid #30363d;
+    }
+
+    .follow-indicator {
+      margin-top: .8rem;
+      font-size: .95rem;
+      color: #8b949e;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f85149;
+      transition: background .3s;
+    }
+
+    .status-dot.connected {
+      background: #3fb950;
+      box-shadow: 0 0 8px rgba(63, 185, 80, .5);
+    }
+
+    /* ---- Gallery ---- */
+    .gallery-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+    }
+
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: .75rem;
+    }
+
+    .thumb {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #30363d;
+      background: #161b22;
+      cursor: pointer;
+      aspect-ratio: 4 / 3;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .thumb.latest {
+      border-color: #58a6ff;
+      box-shadow: 0 0 0 1px #58a6ff;
+    }
+
+    .thumb-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: .2rem .4rem;
+      font-size: .72rem;
+      color: #e6edf3;
+      background: linear-gradient(to top, rgba(0,0,0,.75), transparent);
+      text-align: right;
+    }
+
+    .empty-hint {
+      text-align: center;
+      color: #8b949e;
+      font-size: .95rem;
+      padding: 3rem 1.5rem;
+      line-height: 1.6;
+    }
+
+    /* ---- Slide actions (download / copy) ---- */
+    .slide-actions {
+      display: flex;
+      gap: .6rem;
+      margin-top: .9rem;
+    }
+
+    .slide-action-btn {
+      padding: .55rem 1.1rem;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      background: #161b22;
+      color: #e6edf3;
+      font-family: inherit;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .slide-action-btn:active {
+      transform: scale(0.97);
+    }
+
+    .lightbox-actions {
+      display: flex;
+      gap: .6rem;
+      padding: 0 1rem;
+    }
+
+    /* ---- Lightbox ---- */
+    #lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.96);
+      display: none;
+      flex-direction: column;
+      z-index: 50;
+      touch-action: pan-y;
+    }
+
+    #lightbox.visible {
+      display: flex;
+    }
+
+    .lightbox-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .8rem 1rem;
+      flex-shrink: 0;
+    }
+
+    .lightbox-page-indicator {
+      font-size: .9rem;
+      color: #8b949e;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .lightbox-close {
+      background: none;
+      border: none;
+      color: #e6edf3;
+      font-size: 1.6rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: .3rem .6rem;
+    }
+
+    .lightbox-image-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .lightbox-image-wrap img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .lightbox-nav {
+      display: flex;
+      gap: .75rem;
+      padding: 1rem;
+      flex-shrink: 0;
+    }
+
+    .lightbox-nav-btn {
+      flex: 1;
+      padding: .9rem;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      background: #161b22;
+      color: #e6edf3;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .lightbox-nav-btn:disabled {
+      opacity: .35;
+      cursor: not-allowed;
+    }
+
+    /* ---- Error / connecting states ---- */
+    .state-message {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .state-message .icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .state-message p {
+      color: #8b949e;
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+
+    .state-message .error-text {
+      color: #f85149;
+    }
+
+    .retry-btn {
+      margin-top: 1rem;
+      padding: .6rem 2rem;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      background: #21262d;
+      color: #e6edf3;
+      font-family: inherit;
+      font-size: .95rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Connecting state -->
+  <div class="container" id="connecting-view">
+    <div class="state-message">
+      <div class="icon">📡</div>
+      <p>Connecting to presentation…</p>
+    </div>
+  </div>
+
+  <!-- Error state -->
+  <div class="container" id="error-view" style="display:none">
+    <div class="state-message">
+      <div class="icon">⚠️</div>
+      <p class="error-text" id="error-text">Connection failed</p>
+      <button class="retry-btn" id="retry-btn">Retry</button>
+    </div>
+  </div>
+
+  <!-- Review view -->
+  <div class="container" id="review-view" style="display:none">
+    <div class="header">
+      <h1>Slide Review</h1>
+      <div class="mode-toggle">
+        <button class="mode-btn" id="mode-follow-btn">Follow Live</button>
+        <button class="mode-btn" id="mode-browse-btn">Browse Freely</button>
+      </div>
+      <div class="status">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Connected</span>
+      </div>
+    </div>
+
+    <!-- Follow mode: mirrors whatever the presenter has on screen right now -->
+    <div class="follow-wrap" id="follow-wrap" style="display:none">
+      <div class="empty-hint" id="follow-empty">Waiting for the presenter…</div>
+      <img id="follow-image" alt="Current slide" style="display:none">
+      <div class="follow-indicator" id="follow-indicator"></div>
+      <div class="slide-actions" id="follow-actions" style="display:none">
+        <button class="slide-action-btn" id="follow-download-btn">⬇ Download</button>
+        <button class="slide-action-btn" id="follow-copy-btn">📋 Copy</button>
+      </div>
+    </div>
+
+    <!-- Browse mode: everything shown so far, tap to zoom -->
+    <div class="gallery-wrap" id="gallery-wrap" style="display:none">
+      <div class="empty-hint" id="empty-hint">Waiting for the presenter to show the first slide…</div>
+      <div class="gallery-grid" id="gallery-grid" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- Lightbox -->
+  <div id="lightbox">
+    <div class="lightbox-top">
+      <span class="lightbox-page-indicator" id="lightbox-indicator"></span>
+      <button class="lightbox-close" id="lightbox-close" aria-label="Close">×</button>
+    </div>
+    <div class="lightbox-image-wrap">
+      <img id="lightbox-image" alt="Slide">
+    </div>
+    <div class="lightbox-actions">
+      <button class="lightbox-nav-btn" id="lightbox-download-btn">⬇ Download</button>
+      <button class="lightbox-nav-btn" id="lightbox-copy-btn">📋 Copy</button>
+    </div>
+    <div class="lightbox-nav">
+      <button class="lightbox-nav-btn" id="lightbox-prev">‹ Prev</button>
+      <button class="lightbox-nav-btn" id="lightbox-next">Next ›</button>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      /* ---- DOM refs ---- */
+      const connectingView = document.getElementById('connecting-view');
+      const errorView = document.getElementById('error-view');
+      const reviewView = document.getElementById('review-view');
+      const errorText = document.getElementById('error-text');
+      const retryBtn = document.getElementById('retry-btn');
+
+      const statusDot = document.getElementById('status-dot');
+      const statusText = document.getElementById('status-text');
+      const emptyHint = document.getElementById('empty-hint');
+      const galleryGrid = document.getElementById('gallery-grid');
+      const galleryWrap = document.getElementById('gallery-wrap');
+
+      const modeFollowBtn = document.getElementById('mode-follow-btn');
+      const modeBrowseBtn = document.getElementById('mode-browse-btn');
+      const followWrap = document.getElementById('follow-wrap');
+      const followEmpty = document.getElementById('follow-empty');
+      const followImage = document.getElementById('follow-image');
+      const followIndicator = document.getElementById('follow-indicator');
+      const followActions = document.getElementById('follow-actions');
+      const followDownloadBtn = document.getElementById('follow-download-btn');
+      const followCopyBtn = document.getElementById('follow-copy-btn');
+
+      const lightboxDownloadBtn = document.getElementById('lightbox-download-btn');
+      const lightboxCopyBtn = document.getElementById('lightbox-copy-btn');
+
+      const lightbox = document.getElementById('lightbox');
+      const lightboxImage = document.getElementById('lightbox-image');
+      const lightboxIndicator = document.getElementById('lightbox-indicator');
+      const lightboxClose = document.getElementById('lightbox-close');
+      const lightboxPrev = document.getElementById('lightbox-prev');
+      const lightboxNext = document.getElementById('lightbox-next');
+
+      /* ---- Parse session ID from URL ---- */
+      const params = new URLSearchParams(location.search);
+      const sessionId = params.get('session');
+
+      if (!sessionId) {
+        showError('No session ID provided.\nScan the QR code from the presenter.');
+        return;
+      }
+
+      let ws = null;
+      let reconnectAttempts = 0;
+      const MAX_RECONNECT = 10;
+
+      // pageNum -> dataUrl, only ever populated from what the server sends us
+      const slides = new Map();
+      let openIndex = -1;
+
+      let mode = 'follow';
+      let currentPresenterPage = null;
+
+      /* ---- Connect ---- */
+      function connectWS() {
+        showView('connecting');
+        reconnectAttempts++;
+
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const url = `${proto}://${location.host}/ws`;
+
+        ws = new WebSocket(url);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: 'join-review', sessionId }));
+        };
+
+        ws.onmessage = (event) => {
+          let msg;
+          try { msg = JSON.parse(event.data); } catch (_) { return; }
+
+          switch (msg.type) {
+            case 'review-joined':
+              reconnectAttempts = 0;
+              showView('review');
+              statusDot.classList.add('connected');
+              statusText.textContent = 'Connected';
+              break;
+
+            case 'page-image':
+              if (typeof msg.pageNum === 'number' && msg.dataUrl) {
+                slides.set(msg.pageNum, msg.dataUrl);
+                renderGallery();
+                // Keep the "N / total" indicator and Prev/Next buttons in
+                // sync if a new slide arrives while the lightbox is open.
+                if (lightbox.classList.contains('visible')) updateLightbox();
+                // Swap out the "loading" state if this is the slide Follow mode is waiting on.
+                if (mode === 'follow' && msg.pageNum === currentPresenterPage) renderFollow();
+              }
+              break;
+
+            case 'current-page':
+              if (typeof msg.pageNum === 'number') {
+                currentPresenterPage = msg.pageNum;
+                if (mode === 'follow') renderFollow();
+              }
+              break;
+
+            case 'deck-reset':
+              slides.clear();
+              currentPresenterPage = null;
+              openIndex = -1;
+              lightbox.classList.remove('visible');
+              renderGallery();
+              renderFollow();
+              break;
+
+            case 'session-closed':
+              showError('Presentation ended.');
+              break;
+
+            case 'error':
+              showError(msg.message || 'Connection error');
+              break;
+          }
+        };
+
+        ws.onerror = () => {};
+
+        ws.onclose = (event) => {
+          statusDot.classList.remove('connected');
+          statusText.textContent = 'Disconnected';
+
+          if (event.code === 4004 || event.code === 1000) {
+            showError('Session not found or ended.');
+            return;
+          }
+
+          if (reconnectAttempts < MAX_RECONNECT) {
+            const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 10000);
+            setTimeout(connectWS, delay);
+          } else {
+            showError('Connection lost. Please scan the QR code again.');
+          }
+        };
+      }
+
+      /* ---- Sorted page list helper ---- */
+      function sortedPages() {
+        return Array.from(slides.keys()).sort((a, b) => a - b);
+      }
+
+      /* ---- Mode switching ---- */
+      function setMode(newMode) {
+        mode = newMode;
+        modeFollowBtn.classList.toggle('active', mode === 'follow');
+        modeBrowseBtn.classList.toggle('active', mode === 'browse');
+        followWrap.style.display = mode === 'follow' ? 'flex' : 'none';
+        galleryWrap.style.display = mode === 'browse' ? '' : 'none';
+        if (mode === 'follow') renderFollow();
+      }
+
+      /* ---- Render the Follow-mode big view ---- */
+      function renderFollow() {
+        if (currentPresenterPage !== null && slides.has(currentPresenterPage)) {
+          followEmpty.style.display = 'none';
+          followImage.style.display = '';
+          followImage.src = slides.get(currentPresenterPage);
+          followIndicator.textContent = `Slide #${currentPresenterPage}`;
+          followActions.style.display = 'flex';
+          return;
+        }
+
+        followImage.style.display = 'none';
+        followIndicator.textContent = '';
+        followActions.style.display = 'none';
+        followEmpty.style.display = '';
+        followEmpty.textContent = currentPresenterPage === null
+          ? 'Waiting for the presenter…'
+          : `Loading slide ${currentPresenterPage}…`;
+      }
+
+      modeFollowBtn.addEventListener('click', () => setMode('follow'));
+      modeBrowseBtn.addEventListener('click', () => setMode('browse'));
+      setMode('follow');
+
+      /* ---- Download / copy a slide (skip the screenshot-and-crop dance) ---- */
+      function buildSlideFilename(pageNum) {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const p = String(pageNum).padStart(2, '0');
+        return `${y}${m}${d}_slide_${p}.jpg`;
+      }
+
+      function downloadSlide(pageNum, dataUrl) {
+        if (!dataUrl) return;
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = buildSlideFilename(pageNum);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+
+      function flashButtonLabel(btn, text, ms = 1600) {
+        const original = btn.dataset.originalLabel || btn.textContent;
+        btn.dataset.originalLabel = original;
+        btn.textContent = text;
+        clearTimeout(Number(btn.dataset.flashTimer) || undefined);
+        const timer = setTimeout(() => { btn.textContent = original; }, ms);
+        btn.dataset.flashTimer = String(timer);
+      }
+
+      // Browsers only accept image/png on the clipboard (image/jpeg is
+      // rejected), so re-encode the JPEG snapshot to PNG before writing.
+      async function jpegDataUrlToPngBlob(dataUrl) {
+        const jpegBlob = await (await fetch(dataUrl)).blob();
+        const bitmap = await createImageBitmap(jpegBlob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0);
+        return new Promise((resolve, reject) => {
+          canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('toBlob failed')), 'image/png');
+        });
+      }
+
+      async function copySlideToClipboard(pageNum, dataUrl, btn) {
+        if (!dataUrl) return;
+
+        if (!navigator.clipboard || typeof ClipboardItem === 'undefined') {
+          flashButtonLabel(btn, '⚠️ Not supported');
+          return;
+        }
+
+        try {
+          const pngBlob = await jpegDataUrlToPngBlob(dataUrl);
+          await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+          flashButtonLabel(btn, '✅ Copied!');
+          if (navigator.vibrate) navigator.vibrate(20);
+        } catch (err) {
+          console.error('[review] Copy to clipboard failed', err);
+          flashButtonLabel(btn, '⚠️ Copy failed');
+        }
+      }
+
+      followDownloadBtn.addEventListener('click', () => {
+        if (currentPresenterPage === null) return;
+        downloadSlide(currentPresenterPage, slides.get(currentPresenterPage));
+      });
+      followCopyBtn.addEventListener('click', () => {
+        if (currentPresenterPage === null) return;
+        copySlideToClipboard(currentPresenterPage, slides.get(currentPresenterPage), followCopyBtn);
+      });
+
+      lightboxDownloadBtn.addEventListener('click', () => {
+        const pages = sortedPages();
+        if (openIndex < 0 || openIndex >= pages.length) return;
+        const pageNum = pages[openIndex];
+        downloadSlide(pageNum, slides.get(pageNum));
+      });
+      lightboxCopyBtn.addEventListener('click', () => {
+        const pages = sortedPages();
+        if (openIndex < 0 || openIndex >= pages.length) return;
+        const pageNum = pages[openIndex];
+        copySlideToClipboard(pageNum, slides.get(pageNum), lightboxCopyBtn);
+      });
+
+      /* ---- Render gallery grid ---- */
+      function renderGallery() {
+        const pages = sortedPages();
+
+        if (pages.length === 0) {
+          emptyHint.style.display = '';
+          galleryGrid.style.display = 'none';
+          return;
+        }
+
+        emptyHint.style.display = 'none';
+        galleryGrid.style.display = '';
+        galleryGrid.innerHTML = '';
+
+        const latestPage = pages[pages.length - 1];
+
+        pages.forEach((pageNum, idx) => {
+          const thumb = document.createElement('div');
+          thumb.className = 'thumb' + (pageNum === latestPage ? ' latest' : '');
+
+          const img = document.createElement('img');
+          img.src = slides.get(pageNum);
+          img.alt = `Slide ${pageNum}`;
+          thumb.appendChild(img);
+
+          const label = document.createElement('div');
+          label.className = 'thumb-label';
+          label.textContent = `#${pageNum}`;
+          thumb.appendChild(label);
+
+          thumb.addEventListener('click', () => openLightbox(idx));
+          galleryGrid.appendChild(thumb);
+        });
+      }
+
+      /* ---- Lightbox ---- */
+      function openLightbox(index) {
+        openIndex = index;
+        updateLightbox();
+        lightbox.classList.add('visible');
+      }
+
+      function closeLightbox() {
+        lightbox.classList.remove('visible');
+        openIndex = -1;
+      }
+
+      function updateLightbox() {
+        const pages = sortedPages();
+        if (openIndex < 0 || openIndex >= pages.length) return;
+
+        const pageNum = pages[openIndex];
+        lightboxImage.src = slides.get(pageNum);
+        lightboxIndicator.textContent = `Slide #${pageNum} (${openIndex + 1} / ${pages.length})`;
+        lightboxPrev.disabled = openIndex <= 0;
+        lightboxNext.disabled = openIndex >= pages.length - 1;
+      }
+
+      function navigateLightbox(delta) {
+        const pages = sortedPages();
+        const next = openIndex + delta;
+        if (next < 0 || next >= pages.length) return;
+        openIndex = next;
+        updateLightbox();
+      }
+
+      lightboxClose.addEventListener('click', closeLightbox);
+      lightboxPrev.addEventListener('click', () => navigateLightbox(-1));
+      lightboxNext.addEventListener('click', () => navigateLightbox(1));
+
+      /* ---- Swipe gesture ---- */
+      let touchStartX = null;
+      lightbox.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+      }, { passive: true });
+
+      lightbox.addEventListener('touchend', (e) => {
+        if (touchStartX === null) return;
+        const deltaX = e.changedTouches[0].clientX - touchStartX;
+        touchStartX = null;
+        if (Math.abs(deltaX) < 40) return;
+        navigateLightbox(deltaX > 0 ? -1 : 1);
+      }, { passive: true });
+
+      /* ---- Keyboard (desktop testing convenience) ---- */
+      document.addEventListener('keydown', (e) => {
+        if (!lightbox.classList.contains('visible')) return;
+        if (e.key === 'Escape') closeLightbox();
+        else if (e.key === 'ArrowLeft') navigateLightbox(-1);
+        else if (e.key === 'ArrowRight') navigateLightbox(1);
+      });
+
+      retryBtn.addEventListener('click', () => {
+        reconnectAttempts = 0;
+        connectWS();
+      });
+
+      /* ---- View switching ---- */
+      function showView(name) {
+        connectingView.style.display = name === 'connecting' ? '' : 'none';
+        errorView.style.display = name === 'error' ? '' : 'none';
+        reviewView.style.display = name === 'review' ? '' : 'none';
+      }
+
+      function showError(message) {
+        errorText.textContent = message;
+        showView('error');
+      }
+
+      /* ---- Start ---- */
+      connectWS();
+    })();
+  </script>
+</body>
+</html>

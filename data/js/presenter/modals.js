@@ -1,9 +1,11 @@
+import AppState from '../state.js';
 import comm from '../communication.js';
 import remoteManager from '../remoteManager.js';
 import webcamManager from '../webcamManager.js';
 import { isSupported, applyCaptionsSettings, isEnabled as captionsEnabled, currentFontSize, recognition } from './captionsManager.js';
 import { els } from './elements.js';
 import { uiState } from './uiState.js';
+import { toggleReviewPause } from './slides.js';
 
 export function showHelpModal() {
   const existing = document.getElementById('help-modal');
@@ -308,6 +310,166 @@ export function updateQaModalList() {
     card.appendChild(dismissBtn);
     listEl.appendChild(card);
   });
+}
+
+export async function handleReviewToggle() {
+  if (AppState.mediaType !== 'pdf') {
+    alert('Slide Review is only available for PDF presentations.');
+    return;
+  }
+
+  if (!remoteManager.isConnected()) {
+    try {
+      await remoteManager.connect();
+    } catch (err) {
+      console.error('[presenterUI] Remote connect for Review failed:', err);
+      alert('Failed to connect: ' + err.message);
+      return;
+    }
+  }
+
+  if (uiState.reviewActive) {
+    uiState.reviewActive = false;
+    comm.broadcast('review-hide', {});
+    const existing = document.getElementById('review-modal');
+    if (existing) existing.remove();
+    updateReviewButton();
+  } else {
+    uiState.reviewActive = true;
+
+    const reviewUrl = remoteManager.getReviewUrl();
+    const qrUrl = remoteManager.getReviewQRCodeUrl();
+    comm.broadcast('review-show', {
+      reviewUrl,
+      qrUrl: qrUrl.startsWith('/') ? location.origin + qrUrl : qrUrl,
+    });
+    showReviewModal();
+    updateReviewButton();
+  }
+}
+
+export function showReviewModal() {
+  const existing = document.getElementById('review-modal');
+  if (existing) { existing.remove(); }
+
+  const modal = document.createElement('div');
+  modal.id = 'review-modal';
+  modal.className = 'modal-overlay';
+
+  const panel = document.createElement('div');
+  panel.className = 'modal-panel';
+  panel.style.maxWidth = '400px';
+  panel.style.textAlign = 'center';
+
+  const title = document.createElement('h3');
+  title.textContent = 'Slide Review';
+  panel.appendChild(title);
+
+  const subtitle = document.createElement('p');
+  subtitle.style.cssText = 'color: var(--text-secondary); font-size: .9rem; margin-bottom: 1rem;';
+  subtitle.textContent = 'Students scan this to review slides already shown — never what’s ahead.';
+  panel.appendChild(subtitle);
+
+  const qrImg = document.createElement('img');
+  qrImg.src = remoteManager.getReviewQRCodeUrl();
+  qrImg.alt = 'QR Code for Slide Review';
+  qrImg.className = 'qr-code-img';
+  panel.appendChild(qrImg);
+
+  const urlText = document.createElement('p');
+  urlText.className = 'remote-url-text';
+  urlText.textContent = remoteManager.getReviewUrl();
+  panel.appendChild(urlText);
+
+  const statusEl = document.createElement('p');
+  statusEl.id = 'review-modal-status';
+  statusEl.style.cssText = 'margin-top: .75rem; font-size: .85rem; color: var(--text-muted);';
+  statusEl.textContent = reviewStatusText(remoteManager.getReviewCount());
+  panel.appendChild(statusEl);
+
+  const pauseNoteEl = document.createElement('p');
+  pauseNoteEl.id = 'review-pause-note';
+  pauseNoteEl.style.cssText = 'margin-top: .4rem; font-size: .78rem; color: var(--orange);';
+  panel.appendChild(pauseNoteEl);
+
+  const pauseBtn = document.createElement('button');
+  pauseBtn.className = 'modal-cancel-btn';
+  pauseBtn.id = 'review-pause-btn';
+  pauseBtn.style.cssText = 'margin-top: .75rem; width: 100%;';
+  panel.appendChild(pauseBtn);
+
+  function refreshPauseUI() {
+    pauseBtn.textContent = uiState.reviewPaused ? '▶ Resume Updates' : '⏸ Pause Updates';
+    pauseNoteEl.textContent = uiState.reviewPaused
+      ? 'Paused — students are frozen on the last slide you shared.'
+      : '';
+  }
+  refreshPauseUI();
+
+  pauseBtn.addEventListener('click', () => {
+    toggleReviewPause();
+    refreshPauseUI();
+    updateReviewButton();
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'modal-cancel-btn';
+  closeBtn.textContent = 'Close';
+  closeBtn.style.cssText = 'margin-top: .5rem; width: 100%;';
+  closeBtn.addEventListener('click', () => modal.remove());
+  panel.appendChild(closeBtn);
+
+  modal.appendChild(panel);
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+}
+
+function reviewStatusText(count) {
+  return count > 0
+    ? `${count} student${count > 1 ? 's' : ''} viewing`
+    : 'Waiting for students to scan the QR code…';
+}
+
+let lastKnownReviewCount = 0;
+
+/**
+ * Single persistent handler for review-audience connect/disconnect events.
+ * Registered once (see presenter/index.js) so it fires regardless of
+ * whether the Review modal happens to be open. A newly connected viewer
+ * missed every page pushed before they joined, so we catch them up with
+ * the full cached backlog the moment their join is detected.
+ */
+export function handleReviewClientChange(status) {
+  updateReviewButton(status);
+
+  const modalStatusEl = document.getElementById('review-modal-status');
+  if (modalStatusEl) modalStatusEl.textContent = reviewStatusText(status.reviewCount);
+
+  if (status.reviewCount > lastKnownReviewCount) {
+    // A brand-new viewer just joined — catch them up with everything
+    // already legitimately shared. Never send anything a pause withheld.
+    for (const pageNum of uiState.reviewSentPages) {
+      remoteManager.sendPageImage(pageNum, uiState.reviewImages.get(pageNum));
+    }
+    if (uiState.reviewSentPages.has(AppState.currentPage)) {
+      remoteManager.sendCurrentPage(AppState.currentPage);
+    }
+  }
+  lastKnownReviewCount = status.reviewCount;
+}
+
+export function updateReviewButton(status) {
+  if (!els.reviewBtn) return;
+  const badge = els.reviewBtn.querySelector('.btn-badge');
+  const count = status ? status.reviewCount : remoteManager.getReviewCount();
+  if (uiState.reviewActive) {
+    els.reviewBtn.classList.add('active');
+    if (badge) badge.textContent = uiState.reviewPaused ? '⏸' : (count > 0 ? count : '');
+  } else {
+    els.reviewBtn.classList.remove('active');
+    if (badge) badge.textContent = '';
+  }
+  els.reviewBtn.classList.toggle('paused', uiState.reviewActive && uiState.reviewPaused);
 }
 
 function escapeHtml(str) {

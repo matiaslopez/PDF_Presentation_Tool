@@ -820,6 +820,12 @@ body.resizing #content-splitter {
   border-color: var(--green);
 }
 
+.btn.paused {
+  background: var(--orange-dim);
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
 /* Tooltips */
 [data-tooltip] {
   position: relative;
@@ -1576,6 +1582,63 @@ kbd {
   color: #8b949e;
   word-break: break-all;
   max-width: 600px;
+  line-height: 1.4;
+}
+
+/* ================================================================== */
+/*  Slide Review overlay (audience screen)                             */
+/* ================================================================== */
+
+#review-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 17, 23, 0.92);
+  z-index: 80;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #e6edf3;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#review-overlay.visible {
+  display: flex;
+}
+
+#review-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+}
+
+#review-overlay-title {
+  font-size: 2.2rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+#review-overlay-qr {
+  width: 80vmin;
+  height: 80vmin;
+  max-width: 92vw;
+  max-height: 80vh;
+  border-radius: 16px;
+  border: 3px solid #30363d;
+  background: #fff;
+  padding: 2vmin;
+}
+
+#review-overlay-url {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1rem;
+  color: #8b949e;
+  word-break: break-all;
+  max-width: 80vw;
   line-height: 1.4;
 }
 
