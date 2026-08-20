@@ -9,6 +9,7 @@
 
 const express = require('express');
 const http = require('http');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const QRCode = require('qrcode');
 const path = require('path');
@@ -17,6 +18,48 @@ const fs = require('fs');
 const PORT = process.env.PORT || 80;
 
 const app = express();
+
+/* ------------------------------------------------------------------ */
+/*  Presenter gate (Basic Auth)                                        */
+/*                                                                     */
+/*  Only the pages that let someone START a presentation (load a PDF   */
+/*  and create a session) are gated — the audience-facing pages        */
+/*  (review/remote/qa) and their assets stay open, since students      */
+/*  reach those via QR code with no login of their own.                */
+/* ------------------------------------------------------------------ */
+
+const PRESENTER_USER = process.env.PRESENTER_USER;
+const PRESENTER_PASS = process.env.PRESENTER_PASS;
+const PRESENTER_GATED_PATHS = new Set(['/', '/index.html', '/presentation.html']);
+
+if (!PRESENTER_USER || !PRESENTER_PASS) {
+  console.warn('[server] PRESENTER_USER/PRESENTER_PASS not set — the presenter pages are PUBLIC. Set both env vars to require login.');
+}
+
+function safeEqual(a, b) {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+app.use((req, res, next) => {
+  if (!PRESENTER_USER || !PRESENTER_PASS) return next();
+  if (!PRESENTER_GATED_PATHS.has(req.path)) return next();
+
+  const header = req.headers.authorization || '';
+  const [scheme, encoded] = header.split(' ');
+
+  if (scheme === 'Basic' && encoded) {
+    const [user, pass] = Buffer.from(encoded, 'base64').toString('utf-8').split(':');
+    if (user && pass && safeEqual(user, PRESENTER_USER) && safeEqual(pass, PRESENTER_PASS)) {
+      return next();
+    }
+  }
+
+  res.set('WWW-Authenticate', 'Basic realm="Presenter"');
+  res.status(401).send('Authentication required');
+});
 
 /* ------------------------------------------------------------------ */
 /*  Gestione Contatore Visite (/connections.txt)                       */
