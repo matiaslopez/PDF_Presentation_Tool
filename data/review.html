@@ -582,20 +582,27 @@
       setMode('follow');
 
       /* ---- Download / copy a slide (skip the screenshot-and-crop dance) ---- */
-      function buildSlideFilename(pageNum) {
+      const IMAGE_EXTENSIONS = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' };
+
+      function extensionForDataUrl(dataUrl) {
+        const match = /^data:(image\/[a-z]+);/.exec(dataUrl || '');
+        return (match && IMAGE_EXTENSIONS[match[1]]) || 'jpg';
+      }
+
+      function buildSlideFilename(pageNum, dataUrl) {
         const now = new Date();
         const y = now.getFullYear();
         const m = String(now.getMonth() + 1).padStart(2, '0');
         const d = String(now.getDate()).padStart(2, '0');
         const p = String(pageNum).padStart(2, '0');
-        return `${y}${m}${d}_slide_${p}.jpg`;
+        return `${y}${m}${d}_slide_${p}.${extensionForDataUrl(dataUrl)}`;
       }
 
       function downloadSlide(pageNum, dataUrl) {
         if (!dataUrl) return;
         const a = document.createElement('a');
         a.href = dataUrl;
-        a.download = buildSlideFilename(pageNum);
+        a.download = buildSlideFilename(pageNum, dataUrl);
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -610,11 +617,11 @@
         btn.dataset.flashTimer = String(timer);
       }
 
-      // Browsers only accept image/png on the clipboard (image/jpeg is
-      // rejected), so re-encode the JPEG snapshot to PNG before writing.
-      async function jpegDataUrlToPngBlob(dataUrl) {
-        const jpegBlob = await (await fetch(dataUrl)).blob();
-        const bitmap = await createImageBitmap(jpegBlob);
+      // Browsers only accept image/png on the clipboard (other formats are
+      // rejected), so re-encode the snapshot to PNG before writing.
+      async function imageDataUrlToPngBlob(dataUrl) {
+        const sourceBlob = await (await fetch(dataUrl)).blob();
+        const bitmap = await createImageBitmap(sourceBlob);
         const canvas = document.createElement('canvas');
         canvas.width = bitmap.width;
         canvas.height = bitmap.height;
@@ -633,7 +640,7 @@
         }
 
         try {
-          const pngBlob = await jpegDataUrlToPngBlob(dataUrl);
+          const pngBlob = await imageDataUrlToPngBlob(dataUrl);
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
           flashButtonLabel(btn, '✅ Copied!');
           if (navigator.vibrate) navigator.vibrate(20);

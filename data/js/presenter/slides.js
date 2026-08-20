@@ -164,11 +164,16 @@ export function setNotesZoom(value) {
 }
 
 /**
- * Render a downscaled JPEG snapshot of a PDF page for the Slide Review
+ * Render a downscaled snapshot of a PDF page for the Slide Review
  * audience view and cache it (high-water mark, kept even while paused).
  * Transmission is separate (see sendReviewPage) so a page captured while
  * paused can still be pushed later once Review is resumed. No-op outside
  * PDF mode; re-renders are skipped once a page is already cached.
+ *
+ * Encoded as WebP: for flat, text-heavy slides (the common case) it beats
+ * JPEG at a comparable visual quality, and per spec a browser that can't
+ * encode WebP silently falls back to PNG instead — which also happens to
+ * be the better fallback for this kind of flat/text content over JPEG.
  */
 function captureReviewPage(pageNum) {
   if (AppState.mediaType !== 'pdf') return;
@@ -189,7 +194,7 @@ function captureReviewPage(pageNum) {
     clip,
     dprCap: 1,
   }).then(() => {
-    const dataUrl = offscreenCanvas.toDataURL('image/jpeg', 0.72);
+    const dataUrl = offscreenCanvas.toDataURL('image/webp', 0.82);
     uiState.reviewImages.set(pageNum, dataUrl);
     sendReviewPage(pageNum, dataUrl);
   }).catch((err) => {
