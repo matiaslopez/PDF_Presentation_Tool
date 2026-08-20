@@ -115,7 +115,12 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 /**
- * Sessions map: sessionId → { presenter: WebSocket, remotes: Set<WebSocket>, qaClients: Set<WebSocket>, reviewClients: Set<WebSocket> }
+ * Sessions map: sessionId → {
+ *   presenter: WebSocket, remotes: Set<WebSocket>, qaClients: Set<WebSocket>,
+ *   reviewClients: Set<WebSocket>,
+ *   reviewPageCache: Map<pageNum, dataUrl>  (backlog for late-joining review clients),
+ *   reviewCurrentPage: number | null
+ * }
  */
 const sessions = new Map();
 
@@ -159,7 +164,14 @@ wss.on('connection', (ws) => {
           }
         }
 
-        sessions.set(sessionId, { presenter: ws, remotes: new Set(), qaClients: new Set(), reviewClients: new Set() });
+        sessions.set(sessionId, {
+          presenter: ws,
+          remotes: new Set(),
+          qaClients: new Set(),
+          reviewClients: new Set(),
+          reviewPageCache: new Map(),
+          reviewCurrentPage: null,
+        });
         ws.send(JSON.stringify({ type: 'session-created', sessionId }));
         console.log(`[ws] Session created: ${sessionId}`);
         break;
@@ -223,6 +235,16 @@ wss.on('connection', (ws) => {
         reviewSession.reviewClients.add(ws);
         ws.send(JSON.stringify({ type: 'review-joined', sessionId }));
 
+        // Catch this client up on the backlog directly — never re-broadcast
+        // it to clients who are already caught up (that's what previously
+        // caused bandwidth to blow up as more students joined).
+        reviewSession.reviewPageCache.forEach((dataUrl, pageNum) => {
+          if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'page-image', pageNum, dataUrl }));
+        });
+        if (reviewSession.reviewCurrentPage !== null && ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'current-page', pageNum: reviewSession.reviewCurrentPage }));
+        }
+
         reviewSession.presenter.send(JSON.stringify({
           type: 'review-client-joined',
           reviewCount: reviewSession.reviewClients.size,
@@ -237,6 +259,8 @@ wss.on('connection', (ws) => {
         if (role !== 'presenter' || !sessionId) return;
         const reviewS = sessions.get(sessionId);
         if (!reviewS) return;
+
+        reviewS.reviewPageCache.set(msg.pageNum, msg.dataUrl);
 
         const image = JSON.stringify({
           type: 'page-image',
@@ -256,6 +280,8 @@ wss.on('connection', (ws) => {
         const curS = sessions.get(sessionId);
         if (!curS) return;
 
+        curS.reviewCurrentPage = msg.pageNum;
+
         const pointer = JSON.stringify({
           type: 'current-page',
           pageNum: msg.pageNum,
@@ -272,6 +298,9 @@ wss.on('connection', (ws) => {
         if (role !== 'presenter' || !sessionId) return;
         const resetS = sessions.get(sessionId);
         if (!resetS) return;
+
+        resetS.reviewPageCache.clear();
+        resetS.reviewCurrentPage = null;
 
         const resetMsg = JSON.stringify({ type: 'deck-reset' });
         resetS.reviewClients.forEach((r) => {

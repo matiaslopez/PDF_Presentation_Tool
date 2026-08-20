@@ -435,9 +435,9 @@ let lastKnownReviewCount = 0;
 /**
  * Single persistent handler for review-audience connect/disconnect events.
  * Registered once (see presenter/index.js) so it fires regardless of
- * whether the Review modal happens to be open. A newly connected viewer
- * missed every page pushed before they joined, so we catch them up with
- * the full cached backlog the moment their join is detected.
+ * whether the Review modal happens to be open. The server catches newly
+ * joined viewers up on the backlog directly (targeted, not broadcast), so
+ * this only needs to update the UI.
  */
 export function handleReviewClientChange(status) {
   updateReviewButton(status);
@@ -445,16 +445,6 @@ export function handleReviewClientChange(status) {
   const modalStatusEl = document.getElementById('review-modal-status');
   if (modalStatusEl) modalStatusEl.textContent = reviewStatusText(status.reviewCount);
 
-  if (status.reviewCount > lastKnownReviewCount) {
-    // A brand-new viewer just joined — catch them up with everything
-    // already legitimately shared. Never send anything a pause withheld.
-    for (const pageNum of uiState.reviewSentPages) {
-      remoteManager.sendPageImage(pageNum, uiState.reviewImages.get(pageNum));
-    }
-    if (uiState.reviewSentPages.has(AppState.currentPage)) {
-      remoteManager.sendCurrentPage(AppState.currentPage);
-    }
-  }
   lastKnownReviewCount = status.reviewCount;
 }
 
