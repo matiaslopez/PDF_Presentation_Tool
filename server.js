@@ -280,8 +280,13 @@ wss.on('connection', (ws) => {
 
         // Catch this client up on the backlog directly — never re-broadcast
         // it to clients who are already caught up (that's what previously
-        // caused bandwidth to blow up as more students joined).
+        // caused bandwidth to blow up as more students joined). The client
+        // tells us (via havePages) which pages it already cached locally
+        // — e.g. across a reconnect or page reload — so we only resend
+        // what's actually missing instead of the whole backlog every time.
+        const havePages = new Set(Array.isArray(msg.havePages) ? msg.havePages : []);
         reviewSession.reviewPageCache.forEach((dataUrl, pageNum) => {
+          if (havePages.has(pageNum)) return;
           if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'page-image', pageNum, dataUrl }));
         });
         if (reviewSession.reviewCurrentPage !== null && ws.readyState === 1) {

@@ -451,8 +451,52 @@
       let reconnectAttempts = 0;
       const MAX_RECONNECT = 10;
 
-      // pageNum -> dataUrl, only ever populated from what the server sends us
-      const slides = new Map();
+      /* ---- localStorage cache: survives reloads and WS reconnects so we ---- */
+      /* ---- never re-download a slide we already have.                  ---- */
+      const LS_PREFIX = 'slidereview:';
+      const lsKey = LS_PREFIX + sessionId;
+
+      // This cache only makes sense for the session currently being viewed
+      // — drop any leftovers from past presentations so storage doesn't
+      // grow forever.
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(LS_PREFIX) && key !== lsKey) localStorage.removeItem(key);
+        }
+      } catch (_) { /* localStorage unavailable (private mode, etc.) — non-fatal */ }
+
+      function loadCachedSlides() {
+        try {
+          const raw = localStorage.getItem(lsKey);
+          if (!raw) return [];
+          const obj = JSON.parse(raw);
+          return Object.entries(obj).map(([k, v]) => [Number(k), v]);
+        } catch (_) {
+          return [];
+        }
+      }
+
+      let persistTimer = null;
+      function schedulePersist() {
+        clearTimeout(persistTimer);
+        persistTimer = setTimeout(() => {
+          try {
+            const obj = {};
+            slides.forEach((dataUrl, pageNum) => { obj[pageNum] = dataUrl; });
+            localStorage.setItem(lsKey, JSON.stringify(obj));
+          } catch (_) { /* quota exceeded or unavailable — keep going in-memory only */ }
+        }, 300);
+      }
+
+      function clearCachedSlides() {
+        clearTimeout(persistTimer);
+        try { localStorage.removeItem(lsKey); } catch (_) {}
+      }
+
+      // pageNum -> dataUrl, seeded from localStorage (if we've seen this
+      // session before) and otherwise only ever populated from the server.
+      const slides = new Map(loadCachedSlides());
       let openIndex = -1;
 
       let mode = 'follow';
@@ -469,7 +513,7 @@
         ws = new WebSocket(url);
 
         ws.onopen = () => {
-          ws.send(JSON.stringify({ type: 'join-review', sessionId }));
+          ws.send(JSON.stringify({ type: 'join-review', sessionId, havePages: Array.from(slides.keys()) }));
         };
 
         ws.onmessage = (event) => {
@@ -487,6 +531,7 @@
             case 'page-image':
               if (typeof msg.pageNum === 'number' && msg.dataUrl) {
                 slides.set(msg.pageNum, msg.dataUrl);
+                schedulePersist();
                 renderGallery();
                 // Keep the "N / total" indicator and Prev/Next buttons in
                 // sync if a new slide arrives while the lightbox is open.
@@ -505,6 +550,7 @@
 
             case 'deck-reset':
               slides.clear();
+              clearCachedSlides();
               currentPresenterPage = null;
               openIndex = -1;
               lightbox.classList.remove('visible');
@@ -580,6 +626,7 @@
       modeFollowBtn.addEventListener('click', () => setMode('follow'));
       modeBrowseBtn.addEventListener('click', () => setMode('browse'));
       setMode('follow');
+      renderGallery(); // paint whatever came from the localStorage cache immediately
 
       /* ---- Download / copy a slide (skip the screenshot-and-crop dance) ---- */
       const IMAGE_EXTENSIONS = { 'image/webp': 'webp', 'image/png': 'png', 'image/jpeg': 'jpg' };
