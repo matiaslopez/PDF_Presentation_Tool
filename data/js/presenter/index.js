@@ -5,7 +5,7 @@ import remoteManager from '../remoteManager.js';
 import { els, cacheElements } from './elements.js';
 import { uiState } from './uiState.js';
 import { initSplitter, initSidebarSplitter, applySplitLayout, toggleNotesCollapse, toggleSidebarCollapse, toggleNextSlideCollapse } from './splitters.js';
-import { navigateTo, renderAllPreviews, setNotesZoom } from './slides.js';
+import { navigateTo, renderAllPreviews, setNotesZoom, syncReviewWithClients } from './slides.js';
 import { handleScreenSwitch, handleStartPresentation } from './screens.js';
 import { toggleBlackout, clearPresenterDrawing, syncPresenterDrawCanvas } from './tools.js';
 import { showHelpModal, handleBreakToggle, handleRemoteToggle, updateRemoteButton, handleQaToggle, updateQaButton, updateQaModalList, handleWebcamToggle, handleReviewToggle, handleReviewClientChange } from './modals.js';
@@ -151,6 +151,7 @@ function bindEvents() {
   els.webcamBtn?.addEventListener('click', handleWebcamToggle);
 
   remoteManager.onReviewClientChange(handleReviewClientChange);
+  remoteManager.onReconnect(syncReviewWithClients);
 
   remoteManager.onQaQuestion((question) => {
     uiState.qaQuestions.unshift(question);

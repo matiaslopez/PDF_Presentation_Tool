@@ -220,6 +220,35 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      /* ---- Presenter re-attaches after an unexpected disconnect ---- */
+      /* Unlike create-session, this does NOT reset remotes/qaClients/     */
+      /* reviewClients/reviewPageCache — a brief network drop shouldn't    */
+      /* kick out students who are already connected.                     */
+      case 'resume-session': {
+        sessionId = msg.sessionId;
+        role = 'presenter';
+
+        const existing = sessions.get(sessionId);
+        if (existing) {
+          existing.presenter = ws;
+        } else {
+          // Session is gone (e.g. server restarted) — nothing to resume,
+          // start fresh so the presenter isn't stuck.
+          sessions.set(sessionId, {
+            presenter: ws,
+            remotes: new Set(),
+            qaClients: new Set(),
+            reviewClients: new Set(),
+            reviewPageCache: new Map(),
+            reviewCurrentPage: null,
+          });
+        }
+
+        ws.send(JSON.stringify({ type: 'session-created', sessionId }));
+        console.log(`[ws] Presenter resumed session ${sessionId}`);
+        break;
+      }
+
       /* ---- Phone joins a session ---- */
       case 'join-session': {
         sessionId = msg.sessionId;

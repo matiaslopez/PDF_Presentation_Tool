@@ -16,6 +16,11 @@ let _onStatusChange = null;
 let reconnectTimer = null;
 let _onQaQuestion = null;
 let _onReviewClientChange = null;
+let _onReconnect = null;
+let intentionalDisconnect = false;
+let everConnected = false;
+let reconnectAttempts = 0;
+const MAX_RECONNECT = 10;
 
 /* ------------------------------------------------------------------ */
 /*  Public API                                                         */
@@ -32,69 +37,98 @@ function connect() {
       return;
     }
 
+    intentionalDisconnect = false;
+    everConnected = false;
+    reconnectAttempts = 0;
     sessionId = generateSessionId();
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws`;
-
-    ws = new WebSocket(url);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'create-session', sessionId }));
-    };
-
-    ws.onmessage = (event) => {
-      let msg;
-      try { msg = JSON.parse(event.data); } catch (_) { return; }
-
-      switch (msg.type) {
-        case 'session-created':
-          _fireStatusChange();
-          resolve(sessionId);
-          break;
-
-        case 'remote-joined':
-          remoteCount = msg.remoteCount || 0;
-          _fireStatusChange();
-          break;
-
-        case 'remote-left':
-          remoteCount = msg.remoteCount || 0;
-          _fireStatusChange();
-          break;
-
-        case 'remote-command':
-          if (_onCommand) _onCommand(msg.command);
-          break;
-
-        case 'qa-question':
-          if (_onQaQuestion) _onQaQuestion({ text: msg.text, timestamp: msg.timestamp });
-          break;
-
-        case 'review-client-joined':
-        case 'review-client-left':
-          reviewCount = msg.reviewCount || 0;
-          if (_onReviewClientChange) _onReviewClientChange({ reviewCount });
-          break;
-      }
-    };
-
-    ws.onerror = () => {
-      reject(new Error('WebSocket connection failed'));
-    };
-
-    ws.onclose = () => {
-      remoteCount = 0;
-      reviewCount = 0;
-      _fireStatusChange();
-      if (_onReviewClientChange) _onReviewClientChange({ reviewCount });
-    };
+    _openSocket({ resume: false, resolve, reject });
   });
+}
+
+/**
+ * Open the WebSocket and wire it up. Used both for the initial connect
+ * (resume: false, sends create-session) and for reconnecting after an
+ * unexpected drop (resume: true, sends resume-session to re-attach to the
+ * same session without kicking out already-connected students).
+ */
+function _openSocket({ resume, resolve, reject }) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const url = `${proto}://${location.host}/ws`;
+
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: resume ? 'resume-session' : 'create-session', sessionId }));
+  };
+
+  ws.onmessage = (event) => {
+    let msg;
+    try { msg = JSON.parse(event.data); } catch (_) { return; }
+
+    switch (msg.type) {
+      case 'session-created':
+        everConnected = true;
+        reconnectAttempts = 0;
+        _fireStatusChange();
+        if (resolve) resolve(sessionId);
+        // A resumed session may have missed sends while the socket was
+        // down (e.g. a page image dropped silently) — let callers catch up.
+        if (resume && _onReconnect) _onReconnect();
+        break;
+
+      case 'remote-joined':
+        remoteCount = msg.remoteCount || 0;
+        _fireStatusChange();
+        break;
+
+      case 'remote-left':
+        remoteCount = msg.remoteCount || 0;
+        _fireStatusChange();
+        break;
+
+      case 'remote-command':
+        if (_onCommand) _onCommand(msg.command);
+        break;
+
+      case 'qa-question':
+        if (_onQaQuestion) _onQaQuestion({ text: msg.text, timestamp: msg.timestamp });
+        break;
+
+      case 'review-client-joined':
+      case 'review-client-left':
+        reviewCount = msg.reviewCount || 0;
+        if (_onReviewClientChange) _onReviewClientChange({ reviewCount });
+        break;
+    }
+  };
+
+  ws.onerror = () => {
+    if (reject) reject(new Error('WebSocket connection failed'));
+  };
+
+  ws.onclose = () => {
+    remoteCount = 0;
+    reviewCount = 0;
+    _fireStatusChange();
+    if (_onReviewClientChange) _onReviewClientChange({ reviewCount });
+
+    // Only auto-reconnect a session that was actually up and running —
+    // not a fresh connect() that failed outright (that's the caller's to
+    // handle) and never after an intentional disconnect().
+    if (!intentionalDisconnect && everConnected && sessionId && reconnectAttempts < MAX_RECONNECT) {
+      reconnectAttempts++;
+      const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 10000);
+      reconnectTimer = setTimeout(() => _openSocket({ resume: true }), delay);
+    }
+  };
 }
 
 /**
  * Disconnect and destroy the session.
  */
 function disconnect() {
+  intentionalDisconnect = true;
+  everConnected = false;
   clearTimeout(reconnectTimer);
   if (ws) {
     ws.close();
@@ -105,6 +139,14 @@ function disconnect() {
   reviewCount = 0;
   _fireStatusChange();
   if (_onReviewClientChange) _onReviewClientChange({ reviewCount });
+}
+
+/**
+ * Register callback fired after the presenter's own WebSocket reconnects
+ * and successfully resumes an existing session (see resume-session).
+ */
+function onReconnect(callback) {
+  _onReconnect = callback;
 }
 
 /**
@@ -312,4 +354,5 @@ export default {
   getReviewQRCodeUrl,
   onReviewClientChange,
   getReviewCount,
+  onReconnect,
 };

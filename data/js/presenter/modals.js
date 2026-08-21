@@ -5,7 +5,7 @@ import webcamManager from '../webcamManager.js';
 import { isSupported, applyCaptionsSettings, isEnabled as captionsEnabled, currentFontSize, recognition } from './captionsManager.js';
 import { els } from './elements.js';
 import { uiState } from './uiState.js';
-import { toggleReviewPause } from './slides.js';
+import { toggleReviewPause, syncReviewWithClients } from './slides.js';
 
 export function showHelpModal() {
   const existing = document.getElementById('help-modal');
@@ -345,6 +345,9 @@ export async function handleReviewToggle() {
     });
     showReviewModal();
     updateReviewButton();
+    // Push whatever's already on screen immediately — otherwise students
+    // who scan right away see nothing until the presenter changes slides.
+    syncReviewWithClients();
   }
 }
 
@@ -358,8 +361,15 @@ export function showReviewModal() {
 
   const panel = document.createElement('div');
   panel.className = 'modal-panel';
-  panel.style.maxWidth = '400px';
-  panel.style.textAlign = 'center';
+  panel.style.cssText = 'max-width: 400px; text-align: center; position: relative;';
+
+  const closeX = document.createElement('button');
+  closeX.className = 'modal-close-x';
+  closeX.setAttribute('aria-label', 'Close');
+  closeX.textContent = '×';
+  closeX.style.cssText = 'position: absolute; top: .5rem; right: .5rem; width: 2rem; height: 2rem; border: none; background: none; color: var(--text-secondary); font-size: 1.5rem; line-height: 1; cursor: pointer;';
+  closeX.addEventListener('click', () => modal.remove());
+  panel.appendChild(closeX);
 
   const title = document.createElement('h3');
   title.textContent = 'Slide Review';
@@ -369,6 +379,11 @@ export function showReviewModal() {
   subtitle.style.cssText = 'color: var(--text-secondary); font-size: .9rem; margin-bottom: 1rem;';
   subtitle.textContent = 'Students scan this to review slides already shown — never what’s ahead.';
   panel.appendChild(subtitle);
+
+  const closeNote = document.createElement('p');
+  closeNote.style.cssText = 'color: var(--text-muted); font-size: .78rem; margin-top: -.5rem; margin-bottom: 1rem;';
+  closeNote.textContent = 'Closing this (✕) or the Review button just hides the QR — students already connected keep receiving slides.';
+  panel.appendChild(closeNote);
 
   const qrImg = document.createElement('img');
   qrImg.src = remoteManager.getReviewQRCodeUrl();
@@ -411,13 +426,6 @@ export function showReviewModal() {
     refreshPauseUI();
     updateReviewButton();
   });
-
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'modal-cancel-btn';
-  closeBtn.textContent = 'Close';
-  closeBtn.style.cssText = 'margin-top: .5rem; width: 100%;';
-  closeBtn.addEventListener('click', () => modal.remove());
-  panel.appendChild(closeBtn);
 
   modal.appendChild(panel);
   document.body.appendChild(modal);

@@ -242,3 +242,23 @@ export function toggleReviewPause() {
   }
   return uiState.reviewPaused;
 }
+
+/**
+ * (Re)synchronize review clients with the presenter's local state: resend
+ * anything that was captured but never actually delivered — e.g. a page
+ * whose send silently no-op'd because the presenter's own WebSocket was
+ * mid-reconnect at the time — then make sure the current page is captured
+ * and pointed to. sendReviewPage/pushReviewCurrentPage already skip
+ * already-sent pages and no-op while paused, so this is always safe to call.
+ *
+ * Called both when Review is first turned on (so the slide already on
+ * screen isn't left waiting for the next navigation) and after the
+ * presenter's WebSocket reconnects (so a mid-presentation drop doesn't
+ * strand students on "Loading" forever).
+ */
+export function syncReviewWithClients() {
+  if (AppState.mediaType !== 'pdf') return;
+  uiState.reviewImages.forEach((dataUrl, pageNum) => sendReviewPage(pageNum, dataUrl));
+  captureReviewPage(AppState.currentPage);
+  pushReviewCurrentPage(AppState.currentPage);
+}
