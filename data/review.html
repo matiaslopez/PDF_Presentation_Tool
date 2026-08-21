@@ -98,6 +98,10 @@
       justify-content: center;
       padding: 1rem;
       overflow: hidden;
+      /* Break out of .container's 700px cap — Follow should look as big as
+         the fullscreen lightbox in Browse mode, not squeezed into a column. */
+      width: 100vw;
+      margin-left: calc(50% - 50vw);
     }
 
     .follow-wrap img {

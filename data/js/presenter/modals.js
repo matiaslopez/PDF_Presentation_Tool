@@ -460,14 +460,18 @@ export function updateReviewButton(status) {
   if (!els.reviewBtn) return;
   const badge = els.reviewBtn.querySelector('.btn-badge');
   const count = status ? status.reviewCount : remoteManager.getReviewCount();
-  if (uiState.reviewActive) {
-    els.reviewBtn.classList.add('active');
-    if (badge) badge.textContent = uiState.reviewPaused ? '⏸' : (count > 0 ? count : '');
-  } else {
-    els.reviewBtn.classList.remove('active');
-    if (badge) badge.textContent = '';
-  }
+  els.reviewBtn.classList.toggle('active', uiState.reviewActive);
   els.reviewBtn.classList.toggle('paused', uiState.reviewActive && uiState.reviewPaused);
+  if (badge) {
+    // Students stay connected (and keep receiving slides) even while the
+    // QR is hidden, so keep showing the count instead of clearing it —
+    // otherwise the presenter has no way to tell they're still there.
+    if (uiState.reviewActive && uiState.reviewPaused) {
+      badge.textContent = '⏸';
+    } else {
+      badge.textContent = count > 0 ? `(${count})` : '';
+    }
+  }
 }
 
 function escapeHtml(str) {
